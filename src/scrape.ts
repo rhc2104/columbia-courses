@@ -142,23 +142,57 @@ async function scrape() {
 
     let rows: CourseRow[] | undefined = undefined;
     const tableCount = await page.locator('table').first().count();
+
     if (tableCount > 0) {
       const table = page.locator('table').first();
-      const matrix = await table.evaluate((t) => {
+      const matrix: string[][] = await table.evaluate((t) => {
         const rows = Array.from(t.querySelectorAll('tr'));
         return rows.map((r) =>
           Array.from(r.querySelectorAll('th,td')).map((el) =>
-            (el.textContent || '').trim().replace(/\s+/g, ' '),
-          ),
+            (el.textContent || '').trim().replace(/\s+/g, ' ')
+          )
         );
       });
-      if (matrix.length >= 2) {
-        const headers = matrix[0].map((h) => h || `col_${Math.random().toString(36).slice(2, 6)}`);
-        rows = matrix.slice(1).map((r) => {
+
+      // Defensive: drop empty trailing columns and normalize row lengths
+      const colCount = Math.max(...matrix.map((r) => r.length));
+      const norm = matrix.map((r) => {
+        const copy = r.slice(0, colCount);
+        while (copy.length < colCount) copy.push('');
+        return copy;
+      });
+
+      rows = [];
+
+      if (colCount === 2) {
+        // Common DOC layout: 2 columns, right column is the label, left is the value.
+        // First row often looks like: [ "<callNumber>", "Call Number" ]
+        const firstRow = norm[0] || [];
+        const leftTop = firstRow[0] || '';
+        const rightTop = (firstRow[1] || '').toLowerCase();
+
+        // If the top-right cell is "Call Number", add it explicitly
+        if (rightTop.includes('call number') && leftTop) {
+          rows.push({ 'Call Number': leftTop });
+        }
+
+        // For each subsequent row, flip to { [label]: value }
+        for (let i = 1; i < norm.length; i++) {
+          const value = norm[i][1] || '';
+          const label = norm[i][0] || '';
+          if (label) {
+            rows.push({ [label]: value });
+          }
+        }
+      } else if (norm.length >= 2) {
+        // Fallback for true header tables (3+ columns)
+        const headers = norm[0].map((h, idx) => h || `col_${idx + 1}`);
+        for (let i = 1; i < norm.length; i++) {
+          const r = norm[i];
           const obj: CourseRow = {};
           headers.forEach((h, idx) => (obj[h] = r[idx] || ''));
-          return obj;
-        });
+          rows.push(obj);
+        }
       }
     }
 
