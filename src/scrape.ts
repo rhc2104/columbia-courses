@@ -178,8 +178,8 @@ async function scrape() {
 
         // For each subsequent row, flip to { [label]: value }
         for (let i = 1; i < norm.length; i++) {
-          const value = norm[i][0] || '';
-          const label = norm[i][1] || '';
+          const value = norm[i][1] || '';
+          const label = norm[i][0] || '';
           if (label) {
             rows.push({ [label]: value });
           }
